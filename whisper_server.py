@@ -54,38 +54,35 @@ async def audio_stream(websocket, path):
             sf = soundfile.SoundFile(io.BytesIO(audio_data), channels=1,endian="LITTLE",samplerate=SAMPLING_RATE, subtype="PCM_16",format="RAW")
             audio, _ = librosa.load(sf,sr=SAMPLING_RATE,dtype=np.float32)
 
-            silence_candidate.append(audio)
             out.append(audio)
 
             o = (None, None, None)
-            silence_candidate_len = sum(len(x) for x in silence_candidate)
-            if silence_candidate_len >= SILENCE_SIZE:
-                silence_candidate_chunk = np.concatenate(silence_candidate)
-                rms = np.sqrt(np.mean(silence_candidate_chunk**2))
-                if rms < SILENCE_THRESHOLD:
 
+            rms = np.sqrt(np.mean(audio**2))
+            
+            if rms < SILENCE_THRESHOLD:
+
+                silence_candidate.append(audio)
+                silence_candidate_len = sum(len(x) for x in silence_candidate)
+
+                if silence_candidate_len >= SILENCE_SIZE:
                     out = []
-
                     current_time = time.time()  # Get the current time
                     if current_time - last_silence_log_time >= 2:  # Check if 2 seconds have passed
                         logger.info("Silence detected")
                         last_silence_log_time = current_time  # Update the timestamp
-
+                    
                     if not silence_started:
                         o = online.finish()
-
-                        #works also without this but probably it is better to call init
-                        #becouse after silence, audio could be not relevant to previous
-                        #and context doesn not make sense
-                        online.init()
+                    online.init()
 
                     silence_started = True
-                else:
-                    if silence_started:
-                        last_silence_log_time = 0
-                        silence_started = False
+            else:
+                if silence_started:
+                    last_silence_log_time = 0
+                    silence_started = False
 
-                    silence_candidate = []
+                silence_candidate = []
 
             out_len = sum(len(x) for x in out)
             if out_len >= MIN_CHUNK_SIZE:
